@@ -1,7 +1,7 @@
 """
-VulnApp Lite + Jules Bot — Prezentacja PowerPoint
-Generuje wizualną prezentację projektu.
-Kompatybilna z Google Slides (brak add_connector).
+Jules Bot — Telegram Automation
+Wizualna prezentacja architektury i przepływów.
+Google Slides compatible (no add_connector).
 """
 
 from pptx import Presentation
@@ -9,477 +9,830 @@ from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
-# ── Paleta kolorów ──────────────────────────────────────────────────
-BG_DARK      = RGBColor(0x0D, 0x1B, 0x2A)
-BG_CARD      = RGBColor(0x11, 0x2D, 0x4A)
-ACCENT_CYAN  = RGBColor(0x00, 0xE5, 0xFF)
-ACCENT_GREEN = RGBColor(0x00, 0xE6, 0x76)
-ACCENT_RED   = RGBColor(0xFF, 0x45, 0x45)
-ACCENT_AMBER = RGBColor(0xFF, 0xBF, 0x00)
-TEXT_WHITE   = RGBColor(0xFF, 0xFF, 0xFF)
-TEXT_GRAY    = RGBColor(0xA0, 0xB4, 0xC8)
-TEXT_DARK    = RGBColor(0x0D, 0x1B, 0x2A)
+# ── Paleta ──────────────────────────────────────────────────────────
+BG          = RGBColor(0x0D, 0x17, 0x26)
+CARD        = RGBColor(0x0F, 0x28, 0x44)
+C_TELEGRAM  = RGBColor(0x26, 0x9F, 0xDA)   # Telegram blue
+C_CLAUDE    = RGBColor(0xCC, 0x77, 0xFF)   # Claude purple
+C_GITHUB    = RGBColor(0xFF, 0xFF, 0xFF)   # GitHub white
+C_SYSTEM    = RGBColor(0x00, 0xE6, 0x76)   # systemd / server green
+C_FILE      = RGBColor(0xFF, 0xBF, 0x00)   # state files amber
+C_DECISION  = RGBColor(0xFF, 0x60, 0x60)   # decision red-orange
+C_EXEC      = RGBColor(0xFF, 0x45, 0x45)   # execution red
+C_ACCENT    = RGBColor(0x00, 0xE5, 0xFF)   # general cyan
+TEXT_W      = RGBColor(0xFF, 0xFF, 0xFF)
+TEXT_DIM    = RGBColor(0x7A, 0x9B, 0xBF)
+TEXT_DARK   = RGBColor(0x08, 0x12, 0x1E)
 
-SLIDE_W = Inches(13.33)
-SLIDE_H = Inches(7.5)
+W = Inches(13.33)
+H = Inches(7.5)
 
 prs = Presentation()
-prs.slide_width  = SLIDE_W
-prs.slide_height = SLIDE_H
-
-blank_layout = prs.slide_layouts[6]
-
-
-# ══════════════════════════════════════════════════════════════════════
-# HELPERS
-# ══════════════════════════════════════════════════════════════════════
-
-def add_bg(slide, color=BG_DARK):
-    bg = slide.shapes.add_shape(1, 0, 0, SLIDE_W, SLIDE_H)
-    bg.fill.solid()
-    bg.fill.fore_color.rgb = color
-    bg.line.fill.background()
+prs.slide_width  = W
+prs.slide_height = H
+BLANK = prs.slide_layouts[6]
 
 
-def add_rect(slide, x, y, w, h, fill_color, line_color=None, line_w=Pt(0)):
-    shape = slide.shapes.add_shape(1, x, y, w, h)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill_color
-    if line_color:
-        shape.line.color.rgb = line_color
-        shape.line.width = line_w
-    else:
-        shape.line.fill.background()
-    return shape
+# ════════════════════════════════════════════════════════════════════
+# PRIMITIVE HELPERS
+# ════════════════════════════════════════════════════════════════════
+
+def bg(slide, color=BG):
+    r = slide.shapes.add_shape(1, 0, 0, W, H)
+    r.fill.solid(); r.fill.fore_color.rgb = color
+    r.line.fill.background()
+
+def rect(slide, x, y, w, h, fill, line=None, lw=Pt(1.5)):
+    r = slide.shapes.add_shape(1, x, y, w, h)
+    r.fill.solid(); r.fill.fore_color.rgb = fill
+    if line: r.line.color.rgb = line; r.line.width = lw
+    else: r.line.fill.background()
+    return r
+
+def rrect(slide, x, y, w, h, fill, text="", fs=Pt(12), fc=TEXT_W,
+          bold=False, line=None, lw=Pt(1.5), align=PP_ALIGN.CENTER):
+    r = slide.shapes.add_shape(5, x, y, w, h)
+    r.adjustments[0] = 0.06
+    r.fill.solid(); r.fill.fore_color.rgb = fill
+    if line: r.line.color.rgb = line; r.line.width = lw
+    else: r.line.fill.background()
+    if text:
+        tf = r.text_frame; tf.word_wrap = True
+        p = tf.paragraphs[0]; p.alignment = align
+        ru = p.add_run(); ru.text = text
+        ru.font.size = fs; ru.font.bold = bold
+        ru.font.color.rgb = fc; ru.font.name = "Calibri"
+    return r
+
+def diamond(slide, x, y, w, h, fill, text="", fs=Pt(11), fc=TEXT_W, bold=False, line=None):
+    r = slide.shapes.add_shape(4, x, y, w, h)
+    r.fill.solid(); r.fill.fore_color.rgb = fill
+    if line: r.line.color.rgb = line; r.line.width = Pt(1.5)
+    else: r.line.fill.background()
+    if text:
+        tf = r.text_frame; tf.word_wrap = True
+        p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
+        ru = p.add_run(); ru.text = text
+        ru.font.size = fs; ru.font.bold = bold
+        ru.font.color.rgb = fc; ru.font.name = "Calibri"
+    return r
+
+def oval(slide, x, y, w, h, fill, text="", fs=Pt(12), fc=TEXT_W, bold=False):
+    r = slide.shapes.add_shape(9, x, y, w, h)
+    r.fill.solid(); r.fill.fore_color.rgb = fill
+    r.line.fill.background()
+    if text:
+        tf = r.text_frame; tf.word_wrap = True
+        p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
+        ru = p.add_run(); ru.text = text
+        ru.font.size = fs; ru.font.bold = bold
+        ru.font.color.rgb = fc; ru.font.name = "Calibri"
+    return r
+
+def txt(slide, text, x, y, w, h, fs=Pt(13), bold=False, color=TEXT_W,
+        align=PP_ALIGN.LEFT, italic=False):
+    tb = slide.shapes.add_textbox(x, y, w, h)
+    tf = tb.text_frame; tf.word_wrap = True
+    p = tf.paragraphs[0]; p.alignment = align
+    ru = p.add_run(); ru.text = text
+    ru.font.size = fs; ru.font.bold = bold; ru.font.italic = italic
+    ru.font.color.rgb = color; ru.font.name = "Calibri"
+    return tb
+
+def hline(slide, x1, x2, cy, color, thick=0.035):
+    rect(slide, x1, cy - Inches(thick/2), x2 - x1, Inches(thick), color)
+
+def vline(slide, cx, y1, y2, color, thick=0.035):
+    rect(slide, cx - Inches(thick/2), y1, Inches(thick), y2 - y1, color)
+
+def arrow_d(slide, cx, y1, y2, color):
+    """Arrow pointing down."""
+    vline(slide, cx, y1, y2 - Inches(0.10), color)
+    tw = Inches(0.16)
+    rect(slide, cx - tw/2,           y2 - Inches(0.10), tw,          Inches(0.05), color)
+    rect(slide, cx - tw*0.6/2,       y2 - Inches(0.05), tw * 0.6,   Inches(0.04), color)
+    rect(slide, cx - tw*0.2/2,       y2 - Inches(0.01), tw * 0.2,   Inches(0.03), color)
+
+def arrow_r(slide, x1, x2, cy, color):
+    """Arrow pointing right."""
+    hline(slide, x1, x2 - Inches(0.10), cy, color)
+    th = Inches(0.16)
+    rect(slide, x2 - Inches(0.10), cy - th/2,           Inches(0.05), th,         color)
+    rect(slide, x2 - Inches(0.05), cy - th*0.6/2,       Inches(0.04), th * 0.6,   color)
+    rect(slide, x2 - Inches(0.01), cy - th*0.2/2,       Inches(0.03), th * 0.2,   color)
+
+def arrow_l(slide, x1, x2, cy, color):
+    """Arrow pointing left (x1 > x2)."""
+    hline(slide, x2 + Inches(0.10), x1, cy, color)
+    th = Inches(0.16)
+    rect(slide, x2 + Inches(0.05), cy - th/2,         Inches(0.05), th,         color)
+    rect(slide, x2 + Inches(0.01), cy - th*0.6/2,     Inches(0.04), th * 0.6,   color)
+    rect(slide, x2,                cy - th*0.2/2,     Inches(0.03), th * 0.2,   color)
+
+def arrow_u(slide, cx, y1, y2, color):
+    """Arrow pointing up (y1 > y2)."""
+    vline(slide, cx, y2 + Inches(0.10), y1, color)
+    tw = Inches(0.16)
+    rect(slide, cx - tw/2,       y2 + Inches(0.05), tw,        Inches(0.05), color)
+    rect(slide, cx - tw*0.6/2,   y2 + Inches(0.01), tw*0.6,   Inches(0.04), color)
+    rect(slide, cx - tw*0.2/2,   y2,                tw*0.2,   Inches(0.03), color)
+
+def label_on_line(slide, text, x, y, color=TEXT_DIM):
+    txt(slide, text, x, y, Inches(0.8), Inches(0.28),
+        fs=Pt(9), color=color, bold=True, align=PP_ALIGN.CENTER)
+
+def slide_num(slide, n, total=5):
+    txt(slide, f"0{n} / 0{total}", Inches(11.9), Inches(7.0), Inches(1.3), Inches(0.35),
+        fs=Pt(10), color=C_ACCENT, align=PP_ALIGN.RIGHT)
+
+def header(slide, title, subtitle, accent_color=C_ACCENT):
+    rect(slide, 0, 0, W, Inches(1.3), RGBColor(0x07, 0x14, 0x22))
+    txt(slide, title, Inches(0.5), Inches(0.12), Inches(11), Inches(0.65),
+        fs=Pt(30), bold=True, color=TEXT_W)
+    txt(slide, subtitle, Inches(0.5), Inches(0.75), Inches(11), Inches(0.4),
+        fs=Pt(13), color=TEXT_DIM, italic=True)
+    rect(slide, Inches(0.5), Inches(1.25), Inches(12.33), Inches(0.04), accent_color)
 
 
-def add_text(slide, text, x, y, w, h,
-             font_size=Pt(14), bold=False, color=TEXT_WHITE,
-             align=PP_ALIGN.LEFT, italic=False):
-    txBox = slide.shapes.add_textbox(x, y, w, h)
-    tf = txBox.text_frame
-    tf.word_wrap = True
-    p = tf.paragraphs[0]
-    p.alignment = align
-    run = p.add_run()
-    run.text = text
-    run.font.size = font_size
-    run.font.bold = bold
-    run.font.italic = italic
-    run.font.color.rgb = color
-    run.font.name = "Calibri"
-    return txBox
+# ════════════════════════════════════════════════════════════════════
+# SLIDE 1 — TITLE
+# ════════════════════════════════════════════════════════════════════
 
+s1 = prs.slides.add_slide(BLANK)
+bg(s1)
 
-def add_rounded_box(slide, x, y, w, h, fill, text, txt_size=Pt(13),
-                    txt_color=TEXT_WHITE, bold=False, line_color=None):
-    shape = slide.shapes.add_shape(5, x, y, w, h)  # ROUNDED_RECTANGLE
-    shape.adjustments[0] = 0.05
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill
-    if line_color:
-        shape.line.color.rgb = line_color
-        shape.line.width = Pt(1.5)
-    else:
-        shape.line.fill.background()
-    tf = shape.text_frame
-    tf.word_wrap = True
-    p = tf.paragraphs[0]
-    p.alignment = PP_ALIGN.CENTER
-    run = p.add_run()
-    run.text = text
-    run.font.size = txt_size
-    run.font.bold = bold
-    run.font.color.rgb = txt_color
-    run.font.name = "Calibri"
-    return shape
+# Left dark panel
+rect(s1, 0, 0, Inches(6.0), H, RGBColor(0x06, 0x12, 0x22))
 
+# Title text
+txt(s1, "Jules Bot", Inches(0.6), Inches(1.6), Inches(5.2), Inches(1.4),
+    fs=Pt(56), bold=True, color=C_TELEGRAM)
+txt(s1, "Telegram Automation Layer", Inches(0.6), Inches(3.1), Inches(5.2), Inches(0.6),
+    fs=Pt(20), color=TEXT_W)
+rect(s1, Inches(0.6), Inches(2.98), Inches(1.4), Inches(0.05), C_TELEGRAM)
+txt(s1, "dla VulnApp-Light · rafserver",
+    Inches(0.6), Inches(3.75), Inches(5.2), Inches(0.45),
+    fs=Pt(14), color=TEXT_DIM, italic=True)
 
-def add_arrow_v(slide, cx, y_top, y_bot, color=ACCENT_CYAN):
-    """Pionowa strzałka: cienki prostokąt + mały trójkąt na dole."""
-    line_w = Inches(0.04)
-    add_rect(slide, cx - line_w/2, y_top, line_w, y_bot - y_top - Inches(0.12), color)
-    # Trójkąt (symulacja grotu) — mały kwadrat obrócony
-    tip_size = Inches(0.14)
-    tip = slide.shapes.add_shape(
-        5,  # rounded rect jako grot
-        cx - tip_size/2, y_bot - Inches(0.14), tip_size, Inches(0.14)
-    )
-    tip.fill.solid()
-    tip.fill.fore_color.rgb = color
-    tip.line.fill.background()
-
-
-def add_arrow_h(slide, x_left, x_right, cy, color=ACCENT_CYAN):
-    """Pozioma strzałka: cienki prostokąt."""
-    line_h = Inches(0.04)
-    add_rect(slide, x_left, cy - line_h/2, x_right - x_left, line_h, color)
-    tip_size = Inches(0.14)
-    tip = slide.shapes.add_shape(
-        5,
-        x_right - Inches(0.14), cy - tip_size/2, Inches(0.14), tip_size
-    )
-    tip.fill.solid()
-    tip.fill.fore_color.rgb = color
-    tip.line.fill.background()
-
-
-def accent_bar(slide, color=ACCENT_CYAN):
-    bar = add_rect(slide, Inches(0.5), Inches(1.35), Inches(12.33), Inches(0.05), color)
-    return bar
-
-
-# ══════════════════════════════════════════════════════════════════════
-# SLAJD 1 — Tytuł i Wizja
-# ══════════════════════════════════════════════════════════════════════
-
-s1 = prs.slides.add_slide(blank_layout)
-add_bg(s1)
-
-# Lewy panel
-add_rect(s1, 0, 0, Inches(5.8), SLIDE_H, RGBColor(0x07, 0x23, 0x40))
-
-add_text(s1, "VulnApp Lite", Inches(0.55), Inches(1.8), Inches(5), Inches(1.1),
-         font_size=Pt(48), bold=True, color=ACCENT_CYAN)
-add_text(s1, "+ Jules Bot", Inches(0.55), Inches(2.9), Inches(5), Inches(0.8),
-         font_size=Pt(36), color=TEXT_WHITE)
-add_rect(s1, Inches(0.55), Inches(3.65), Inches(1.2), Inches(0.05), ACCENT_CYAN)
-add_text(s1, "Zarządzanie podatnościami\ni automatyzacja przez Telegram",
-         Inches(0.55), Inches(3.75), Inches(5.2), Inches(1.1),
-         font_size=Pt(16), color=TEXT_GRAY)
-
-# 4 feature cards
-labels = [
-    ("CVE\nTracking",   ACCENT_CYAN,  "🔍"),
-    ("Mobile\niOS App", ACCENT_GREEN, "📱"),
-    ("Telegram\nBot",   ACCENT_AMBER, "🤖"),
-    ("Security\nFirst", ACCENT_RED,   "🔒"),
+# Right — component circles
+components = [
+    (Inches(7.2),  Inches(1.5), "jules_listener.sh",  "systemd\nlong-poll",      C_SYSTEM),
+    (Inches(10.2), Inches(1.5), "jules_actions.sh",   "brain\n2-phase",           C_TELEGRAM),
+    (Inches(7.2),  Inches(4.0), "jules_review.sh",    "cron\n5 min",              C_CLAUDE),
+    (Inches(10.2), Inches(4.0), "debate.sh",          "Claude ↔\nGemini",         C_FILE),
 ]
-for i, (label, col, icon) in enumerate(labels):
-    bx = Inches(6.3) + i * Inches(1.7)
-    by = Inches(2.2)
-    add_rounded_box(s1, bx, by, Inches(1.5), Inches(2.2), BG_CARD, "", line_color=col)
-    add_text(s1, icon,  bx, by + Inches(0.25), Inches(1.5), Inches(0.6),
-             font_size=Pt(30), align=PP_ALIGN.CENTER)
-    add_text(s1, label, bx, by + Inches(0.9),  Inches(1.5), Inches(0.9),
-             font_size=Pt(13), bold=True, color=col, align=PP_ALIGN.CENTER)
+for cx, cy, title, sub, col in components:
+    oval(s1, cx - Inches(0.9), cy - Inches(0.75), Inches(1.8), Inches(1.5),
+         RGBColor(int(col[0]*0.3), int(col[1]*0.3), int(col[2]*0.3)),
+         bold=False)
+    rect(s1, cx - Inches(0.9), cy - Inches(0.75), Inches(1.8), Inches(1.5),
+         RGBColor(int(col[0]*0.3), int(col[1]*0.3), int(col[2]*0.3)),
+         line=col, lw=Pt(2.0))
+    txt(s1, title, cx - Inches(0.88), cy - Inches(0.62), Inches(1.76), Inches(0.4),
+        fs=Pt(10), bold=True, color=col, align=PP_ALIGN.CENTER)
+    txt(s1, sub,   cx - Inches(0.88), cy - Inches(0.18), Inches(1.76), Inches(0.5),
+        fs=Pt(10), color=TEXT_DIM, align=PP_ALIGN.CENTER)
 
-add_text(s1, "rafserver · Flask · SQLite · ZeroTier · Nginx · systemd",
-         Inches(0.5), Inches(6.9), Inches(12.3), Inches(0.45),
-         font_size=Pt(11), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-add_text(s1, "01 / 05", Inches(11.8), Inches(6.9), Inches(1.3), Inches(0.4),
-         font_size=Pt(11), color=ACCENT_CYAN, align=PP_ALIGN.RIGHT)
+# Connection arrows between components
+arrow_r(s1, Inches(8.1), Inches(9.3), Inches(1.5 - 0.1), C_SYSTEM)
+arrow_d(s1, Inches(7.2), Inches(2.25), Inches(3.25), C_CLAUDE)
+arrow_d(s1, Inches(10.2), Inches(2.25), Inches(3.25), C_TELEGRAM)
+arrow_r(s1, Inches(8.1), Inches(9.3), Inches(4.0 - 0.1), C_FILE)
 
-
-# ══════════════════════════════════════════════════════════════════════
-# SLAJD 2 — Architektura Systemu
-# ══════════════════════════════════════════════════════════════════════
-
-s2 = prs.slides.add_slide(blank_layout)
-add_bg(s2)
-accent_bar(s2, ACCENT_CYAN)
-
-add_text(s2, "Architektura Systemu", Inches(0.5), Inches(0.3), Inches(9), Inches(0.9),
-         font_size=Pt(32), bold=True, color=TEXT_WHITE)
-add_text(s2, "Jak działają wszystkie komponenty razem",
-         Inches(0.5), Inches(1.1), Inches(9), Inches(0.5),
-         font_size=Pt(14), color=TEXT_GRAY)
-
-# Warstwa 1: Klienci
-add_text(s2, "KLIENCI", Inches(0.5), Inches(1.55), Inches(12.3), Inches(0.3),
-         font_size=Pt(10), bold=True, color=ACCENT_CYAN, align=PP_ALIGN.CENTER)
-
-clients = [
-    ("🌐  Przeglądarka Web\n(LAN / port 80)",    Inches(0.5)),
-    ("📱  VulnApp Mobile\n(iOS / ZeroTier)",      Inches(3.5)),
-    ("🤖  Jules Bot\n(Telegram API)",             Inches(6.5)),
-    ("👤  Admin\n(SSH / terminal)",               Inches(9.5)),
+# Legend
+items = [
+    (C_TELEGRAM,  "Telegram API"),
+    (C_CLAUDE,    "Claude / Gemini AI"),
+    (C_SYSTEM,    "Server / systemd"),
+    (C_FILE,      "State files / cron"),
+    (C_GITHUB,    "GitHub CLI"),
 ]
-for label, bx in clients:
-    add_rounded_box(s2, bx, Inches(1.9), Inches(2.7), Inches(0.85),
-                    BG_CARD, label, txt_size=Pt(12), line_color=ACCENT_CYAN)
+for i, (col, lbl) in enumerate(items):
+    bx = Inches(6.4) + i * Inches(1.38)
+    rect(s1, bx, Inches(6.85), Inches(0.22), Inches(0.22), col)
+    txt(s1, lbl, bx + Inches(0.28), Inches(6.82), Inches(1.1), Inches(0.28),
+        fs=Pt(9.5), color=TEXT_DIM)
 
-# Strzałki klienci → proxy
-for bx in [Inches(1.85), Inches(4.85), Inches(7.85), Inches(10.85)]:
-    add_arrow_v(s2, bx, Inches(2.75), Inches(3.25), ACCENT_CYAN)
+slide_num(s1, 1)
 
-# Warstwa 2: Proxy
-add_text(s2, "SIEĆ / PROXY", Inches(0.5), Inches(3.1), Inches(12.3), Inches(0.3),
-         font_size=Pt(10), bold=True, color=ACCENT_GREEN, align=PP_ALIGN.CENTER)
 
-add_rounded_box(s2, Inches(0.5), Inches(3.45), Inches(5.8), Inches(0.75),
-                RGBColor(0x00, 0x33, 0x22),
-                "🔀  Nginx Reverse Proxy  (port 80)",
-                txt_size=Pt(13), bold=True, txt_color=ACCENT_GREEN, line_color=ACCENT_GREEN)
-add_rounded_box(s2, Inches(7.0), Inches(3.45), Inches(5.8), Inches(0.75),
-                RGBColor(0x33, 0x22, 0x00),
-                "🌐  ZeroTier VPN  (zdalny dostęp)",
-                txt_size=Pt(13), bold=True, txt_color=ACCENT_AMBER, line_color=ACCENT_AMBER)
-# łącznik poziomy między proxy
-add_arrow_h(s2, Inches(6.3), Inches(7.0), Inches(3.82), ACCENT_AMBER)
+# ════════════════════════════════════════════════════════════════════
+# SLIDE 2 — TOPOLOGY MAP
+# ════════════════════════════════════════════════════════════════════
 
-# Strzałki proxy → backend
-add_arrow_v(s2, Inches(3.4), Inches(4.2), Inches(4.75), ACCENT_GREEN)
-add_arrow_v(s2, Inches(9.9), Inches(4.2), Inches(4.75), ACCENT_AMBER)
+s2 = prs.slides.add_slide(BLANK)
+bg(s2)
+header(s2, "Mapa Zależności — Topology", "Wszystkie komponenty i połączenia", C_TELEGRAM)
 
-# Warstwa 3: Backend
-add_text(s2, "BACKEND  (rafserver — Ubuntu 24.04, AMD A6, 8GB RAM)",
-         Inches(0.5), Inches(4.6), Inches(12.3), Inches(0.3),
-         font_size=Pt(10), bold=True, color=ACCENT_RED, align=PP_ALIGN.CENTER)
+# ── ROW 1: External world ────────────────────────────────────────
+# User (iPhone)
+rrect(s2, Inches(0.25), Inches(1.55), Inches(1.8), Inches(0.75),
+      RGBColor(0x0F, 0x28, 0x44), "📱 User\niPhone", fs=Pt(11),
+      bold=True, fc=TEXT_W, line=C_TELEGRAM)
 
-backend = [
-    ("🐍  Flask\n+ Gunicorn",  Inches(0.5),  ACCENT_RED),
-    ("📊  SQLite\ntracker.db", Inches(3.0),  ACCENT_AMBER),
-    ("📁  CSV Input\nWeekly/", Inches(5.5),  TEXT_GRAY),
-    ("⚙️  systemd\nServices", Inches(8.0),  ACCENT_GREEN),
-    ("📋  Jules\nScripts",     Inches(10.5), ACCENT_CYAN),
+# Telegram API
+rrect(s2, Inches(2.6), Inches(1.55), Inches(2.2), Inches(0.75),
+      RGBColor(0x06, 0x38, 0x5C), "☁️  Telegram API\napi.telegram.org",
+      fs=Pt(10), bold=True, fc=C_TELEGRAM, line=C_TELEGRAM)
+
+# GitHub
+rrect(s2, Inches(5.4), Inches(1.55), Inches(2.2), Inches(0.75),
+      RGBColor(0x12, 0x12, 0x12), "🐙  GitHub API\nmrBTL/VulnApp-Light",
+      fs=Pt(10), bold=True, fc=C_GITHUB, line=C_GITHUB)
+
+# Claude API
+rrect(s2, Inches(8.3), Inches(1.55), Inches(2.3), Inches(0.75),
+      RGBColor(0x2A, 0x0A, 0x44), "🤖  Claude API\nsonnet-4-6 / haiku",
+      fs=Pt(10), bold=True, fc=C_CLAUDE, line=C_CLAUDE)
+
+# Gemini
+rrect(s2, Inches(11.1), Inches(1.55), Inches(1.95), Inches(0.75),
+      RGBColor(0x0D, 0x2A, 0x1A), "✨  Gemini\ngemini -p",
+      fs=Pt(10), bold=True, fc=C_SYSTEM, line=C_SYSTEM)
+
+# ── ROW 2: Services ──────────────────────────────────────────────
+# jules_listener.sh (systemd)
+rrect(s2, Inches(0.25), Inches(3.1), Inches(2.5), Inches(1.1),
+      RGBColor(0x06, 0x2A, 0x1A),
+      "⚙️  jules-listener.service\n(systemd, autostart)\nlong-poll timeout=30s",
+      fs=Pt(10), bold=False, fc=C_SYSTEM, line=C_SYSTEM)
+
+# jules_actions.sh — central brain
+rrect(s2, Inches(3.2), Inches(2.85), Inches(3.6), Inches(1.5),
+      RGBColor(0x06, 0x28, 0x50),
+      "🧠  jules_actions.sh\nlock: PID + flock\n2-phase: plan → confirm → exec\nhistory · context · routing",
+      fs=Pt(10), bold=False, fc=C_TELEGRAM, line=C_TELEGRAM, lw=Pt(2.5))
+
+# State files cluster
+rrect(s2, Inches(7.2), Inches(2.9), Inches(0.95), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".tg_offset",    fs=Pt(9), fc=C_FILE, line=C_FILE)
+rrect(s2, Inches(7.2), Inches(3.5), Inches(0.95), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".tg_history",   fs=Pt(9), fc=C_FILE, line=C_FILE)
+rrect(s2, Inches(8.3), Inches(2.9), Inches(1.1), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".pending_action",fs=Pt(8.5), fc=C_FILE, line=C_FILE)
+rrect(s2, Inches(8.3), Inches(3.5), Inches(1.1), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".pending_jules", fs=Pt(8.5), fc=C_FILE, line=C_FILE)
+rrect(s2, Inches(9.55), Inches(2.9), Inches(1.1), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".debate_topic",  fs=Pt(8.5), fc=C_FILE, line=C_FILE)
+
+txt(s2, "STATE FILES", Inches(7.2), Inches(2.62), Inches(3.5), Inches(0.3),
+    fs=Pt(9), bold=True, color=C_FILE)
+
+# jules_review.sh
+rrect(s2, Inches(0.25), Inches(4.9), Inches(2.5), Inches(0.9),
+      RGBColor(0x1A, 0x06, 0x2A),
+      "🔄  jules_review.sh\ncron każde 5 min\n1 PR per run",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+
+# .reviewed_prs
+rrect(s2, Inches(3.2), Inches(5.05), Inches(1.1), Inches(0.5),
+      RGBColor(0x2A, 0x1A, 0x00), ".reviewed_prs", fs=Pt(9), fc=C_FILE, line=C_FILE)
+
+# debate.sh
+rrect(s2, Inches(4.8), Inches(4.9), Inches(2.2), Inches(0.9),
+      RGBColor(0x1A, 0x15, 0x00),
+      "🗣️  debate.sh\nClaude ↔ Gemini rounds\nmax 6 · consensus check",
+      fs=Pt(10), fc=C_FILE, line=C_FILE)
+
+# Jules AI (remote agent)
+rrect(s2, Inches(7.2), Inches(4.9), Inches(2.1), Inches(0.9),
+      RGBColor(0x10, 0x22, 0x10),
+      "🤖  Jules AI\n(remote agent)\njules new --repo",
+      fs=Pt(10), fc=C_SYSTEM, line=C_SYSTEM)
+
+# ── ARROWS ──────────────────────────────────────────────────────
+# User ↔ Telegram API (double arrow via labels)
+arrow_r(s2, Inches(2.05), Inches(2.60), Inches(1.95), C_TELEGRAM)
+arrow_l(s2, Inches(2.05), Inches(2.60), Inches(2.18), C_TELEGRAM)
+
+# Telegram API → listener
+arrow_d(s2, Inches(2.7), Inches(2.30), Inches(3.10), C_TELEGRAM)
+txt(s2, "getUpdates\npoll", Inches(2.72), Inches(2.55), Inches(1.1), Inches(0.5),
+    fs=Pt(8), color=C_TELEGRAM)
+
+# listener → actions
+arrow_r(s2, Inches(2.75), Inches(3.20), Inches(3.65), C_SYSTEM)
+txt(s2, "trigger", Inches(2.8), Inches(3.45), Inches(0.8), Inches(0.25),
+    fs=Pt(8), color=C_SYSTEM)
+
+# actions → Telegram (sendMessage)
+arrow_u(s2, Inches(3.7), Inches(2.85), Inches(2.30), C_TELEGRAM)
+txt(s2, "sendMessage\nbottons", Inches(2.42), Inches(2.52), Inches(1.0), Inches(0.4),
+    fs=Pt(8), color=C_TELEGRAM)
+
+# actions → GitHub
+arrow_r(s2, Inches(6.8), Inches(5.40), Inches(2.0), C_GITHUB)
+txt(s2, "gh cli", Inches(5.95), Inches(1.78), Inches(0.7), Inches(0.25),
+    fs=Pt(8), bold=True, color=C_GITHUB)
+
+# actions → Claude (plan)
+arrow_r(s2, Inches(6.8), Inches(8.30), Inches(3.25), C_CLAUDE)
+txt(s2, "plan\nphase", Inches(7.15), Inches(3.05), Inches(0.8), Inches(0.4),
+    fs=Pt(8), color=C_CLAUDE)
+
+# actions → Claude (exec)
+arrow_r(s2, Inches(6.8), Inches(8.30), Inches(3.65), C_EXEC)
+txt(s2, "exec\n+Bash(*)", Inches(7.1), Inches(3.62), Inches(0.9), Inches(0.4),
+    fs=Pt(8), bold=True, color=C_EXEC)
+
+# actions ↔ state files
+hline(s2, Inches(6.8), Inches(7.2), Inches(3.25), C_FILE, thick=0.025)
+hline(s2, Inches(6.8), Inches(7.2), Inches(3.65), C_FILE, thick=0.025)
+
+# review → .reviewed_prs
+arrow_r(s2, Inches(2.75), Inches(3.2), Inches(5.3), C_FILE)
+
+# review → Claude
+arrow_r(s2, Inches(2.75), Inches(8.3), Inches(5.35), C_CLAUDE)
+txt(s2, "review", Inches(5.5), Inches(5.12), Inches(0.7), Inches(0.25),
+    fs=Pt(8), color=C_CLAUDE)
+
+# actions → debate.sh
+arrow_d(s2, Inches(5.0), Inches(4.35), Inches(4.90), C_FILE)
+txt(s2, "/debate", Inches(5.05), Inches(4.57), Inches(0.7), Inches(0.25),
+    fs=Pt(8), color=C_FILE)
+
+# debate → Claude
+arrow_r(s2, Inches(7.0), Inches(8.3), Inches(5.17), C_CLAUDE)
+# debate → Gemini
+arrow_r(s2, Inches(7.0), Inches(11.1), Inches(5.38), C_SYSTEM)
+txt(s2, "rounds", Inches(9.0), Inches(5.18), Inches(0.8), Inches(0.25),
+    fs=Pt(8), color=C_CLAUDE)
+
+# actions → Jules AI (delegation)
+arrow_r(s2, Inches(6.8), Inches(7.2), Inches(5.3), C_SYSTEM)
+txt(s2, "delegate", Inches(6.82), Inches(5.08), Inches(0.8), Inches(0.25),
+    fs=Pt(8), color=C_SYSTEM)
+
+# Claude ↔ Gemini (in debate)
+arrow_r(s2, Inches(10.6), Inches(11.1), Inches(1.93), C_CLAUDE)
+arrow_l(s2, Inches(10.6), Inches(11.1), Inches(2.19), C_SYSTEM)
+
+slide_num(s2, 2)
+
+
+# ════════════════════════════════════════════════════════════════════
+# SLIDE 3 — MAIN MESSAGE FLOW (State Machine)
+# ════════════════════════════════════════════════════════════════════
+
+s3 = prs.slides.add_slide(BLANK)
+bg(s3)
+header(s3, "Przepływ Wiadomości — State Machine", "Od Telegram → Plan → Confirm → Exec", C_TELEGRAM)
+
+# Two columns: left = guards/routing, right = phase detail
+# Left column centers
+LC = Inches(2.2)   # left column center x
+RC = Inches(8.8)   # right column center x
+NW = Inches(3.2)   # node width
+NH = Inches(0.62)  # node height
+DW = Inches(3.0)   # diamond width
+DH = Inches(0.75)  # diamond height
+
+# ── LEFT COLUMN: Main flow ──────────────────────────────────────
+y = Inches(1.5)
+
+# START
+oval(s3, LC - Inches(1.1), y, Inches(2.2), Inches(0.5),
+     C_SYSTEM, "▶  Wiadomość z Telegram", fs=Pt(11), bold=True)
+y += Inches(0.5)
+arrow_d(s3, LC, y, y + Inches(0.3), C_SYSTEM)
+y += Inches(0.3)
+
+# Lock check
+diamond(s3, LC - DW/2, y, DW, DH, RGBColor(0x2A, 0x10, 0x00),
+        "PID istnieje\ni działa?", fs=Pt(11), bold=True,
+        fc=C_DECISION, line=C_DECISION)
+# YES branch → exit
+arrow_r(s3, LC + DW/2, LC + DW/2 + Inches(0.8), y + DH/2, C_DECISION)
+rrect(s3, LC + DW/2 + Inches(0.8), y + DH/2 - Inches(0.22),
+      Inches(1.3), Inches(0.44),
+      RGBColor(0x28, 0x06, 0x06), "⛔  exit(0)\nalready running",
+      fs=Pt(9), fc=C_DECISION, line=C_DECISION)
+txt(s3, "TAK", LC + DW/2 + Inches(0.05), y + DH/2 - Inches(0.34),
+    Inches(0.5), Inches(0.28), fs=Pt(9), bold=True, color=C_DECISION)
+# NO branch ↓
+arrow_d(s3, LC, y + DH, y + DH + Inches(0.3), C_SYSTEM)
+txt(s3, "NIE", LC + Inches(0.08), y + DH + Inches(0.02),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_SYSTEM)
+y += DH + Inches(0.3)
+
+# Auth check
+diamond(s3, LC - DW/2, y, DW, DH, RGBColor(0x2A, 0x10, 0x00),
+        "from_id ==\nCHAT_ID?", fs=Pt(11), bold=True,
+        fc=C_DECISION, line=C_DECISION)
+# NO → skip
+arrow_r(s3, LC + DW/2, LC + DW/2 + Inches(0.8), y + DH/2, C_DECISION)
+rrect(s3, LC + DW/2 + Inches(0.8), y + DH/2 - Inches(0.22),
+      Inches(1.35), Inches(0.44),
+      RGBColor(0x28, 0x06, 0x06), "⛔  skip\n+update offset",
+      fs=Pt(9), fc=C_DECISION, line=C_DECISION)
+txt(s3, "NIE", LC + DW/2 + Inches(0.05), y + DH/2 - Inches(0.34),
+    Inches(0.5), Inches(0.28), fs=Pt(9), bold=True, color=C_DECISION)
+arrow_d(s3, LC, y + DH, y + DH + Inches(0.3), C_SYSTEM)
+txt(s3, "TAK", LC + Inches(0.08), y + DH + Inches(0.02),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_SYSTEM)
+y += DH + Inches(0.3)
+
+# Router
+rrect(s3, LC - NW/2, y, NW, NH, RGBColor(0x06, 0x24, 0x42),
+      "🔀  COMMAND ROUTER\nparsuje tekst / callback",
+      fs=Pt(10), bold=True, fc=C_TELEGRAM, line=C_TELEGRAM)
+y_router_bot = y + NH
+
+# Branch lines from router
+branch_y = y + NH + Inches(0.25)
+arrow_d(s3, LC, y + NH, branch_y, C_TELEGRAM)
+
+# Horizontal branch bar
+hline(s3, LC - Inches(1.5), LC + Inches(1.5), branch_y, C_TELEGRAM)
+
+# Branch nodes below bar
+branches = [
+    (LC - Inches(1.5), "/status",         "systemctl\n+ gh pr list",   C_SYSTEM),
+    (LC - Inches(0.5), "cancellation?",   "rm .pending*\nAnulowano",   C_DECISION),
+    (LC + Inches(0.5), "/menu /start",    "inline\nkeyboard",          C_TELEGRAM),
+    (LC + Inches(1.5), "/debate",         "→ debate.sh",               C_FILE),
 ]
-for label, bx, col in backend:
-    add_rounded_box(s2, bx, Inches(4.95), Inches(2.4), Inches(0.9),
-                    BG_CARD, label, txt_size=Pt(12), bold=True,
-                    txt_color=col, line_color=col)
+for bx, label, sub, col in branches:
+    vline(s3, bx, branch_y, branch_y + Inches(0.3), col)
+    rrect(s3, bx - Inches(0.65), branch_y + Inches(0.3),
+          Inches(1.3), Inches(0.62),
+          CARD, f"{label}\n{sub}",
+          fs=Pt(9), fc=col, line=col)
 
-add_text(s2, "Dane: Defender CSV → /Input/Weekly/  |  API: /api/cves  |  Logi: /var/log/vulnapp/",
-         Inches(0.5), Inches(6.85), Inches(12.3), Inches(0.4),
-         font_size=Pt(10), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-add_text(s2, "02 / 05", Inches(11.8), Inches(6.85), Inches(1.3), Inches(0.4),
-         font_size=Pt(11), color=ACCENT_CYAN, align=PP_ALIGN.RIGHT)
+# Main path continues down center: confirmation → plan
+arrow_d(s3, LC, branch_y + Inches(0.92), branch_y + Inches(1.2), C_TELEGRAM)
+y = branch_y + Inches(1.2)
+
+diamond(s3, LC - DW/2, y, DW, DH, RGBColor(0x20, 0x10, 0x00),
+        ".pending_action\n+ confirmation?", fs=Pt(10), bold=True,
+        fc=C_FILE, line=C_FILE)
+arrow_d(s3, LC, y + DH, y + DH + Inches(0.3), C_SYSTEM)
+txt(s3, "NIE → PLAN", LC + Inches(0.08), y + DH + Inches(0.01),
+    Inches(1.1), Inches(0.28), fs=Pt(9), bold=True, color=C_SYSTEM)
+# YES → EXEC
+arrow_r(s3, LC + DW/2, LC + DW/2 + Inches(0.6), y + DH/2, C_EXEC)
+rrect(s3, LC + DW/2 + Inches(0.6), y + DH/2 - Inches(0.22),
+      Inches(1.4), Inches(0.44),
+      RGBColor(0x28, 0x06, 0x06), "→ EXEC PHASE\n(prawa kolumna)",
+      fs=Pt(9), fc=C_EXEC, line=C_EXEC)
+txt(s3, "TAK", LC + DW/2 + Inches(0.05), y + DH/2 - Inches(0.34),
+    Inches(0.5), Inches(0.28), fs=Pt(9), bold=True, color=C_EXEC)
+
+# ── RIGHT COLUMN: Plan Phase & Exec Phase ───────────────────────
+# PLAN PHASE
+ry = Inches(1.5)
+rrect(s3, RC - NW/2, ry, NW, Inches(0.82),
+      RGBColor(0x10, 0x06, 0x2A),
+      "📥  PLAN PHASE\nget_context():\nopen PRs · agents.md · git status",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+ry += Inches(0.82)
+arrow_d(s3, RC, ry, ry + Inches(0.28), C_CLAUDE)
+ry += Inches(0.28)
+
+rrect(s3, RC - NW/2, ry, NW, NH,
+      RGBColor(0x18, 0x06, 0x38),
+      "🤖  claude -p\n--model sonnet-4-6  timeout 120s",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+ry += NH
+arrow_d(s3, RC, ry, ry + Inches(0.28), C_CLAUDE)
+ry += Inches(0.28)
+
+diamond(s3, RC - DW/2, ry, DW, DH,
+        RGBColor(0x1A, 0x08, 0x30),
+        "response ends\nwith CONFIRM?", fs=Pt(11), bold=True,
+        fc=C_CLAUDE, line=C_CLAUDE)
+# YES branch →
+arrow_r(s3, RC + DW/2, RC + DW/2 + Inches(0.55), ry + DH/2, C_FILE)
+rrect(s3, RC + DW/2 + Inches(0.55), ry + DH/2 - Inches(0.33),
+      Inches(1.55), Inches(0.66),
+      RGBColor(0x2A, 0x1A, 0x00),
+      "save\n.pending_action\nshow buttons",
+      fs=Pt(9), fc=C_FILE, line=C_FILE)
+txt(s3, "TAK", RC + DW/2 + Inches(0.05), ry + DH/2 - Inches(0.35),
+    Inches(0.5), Inches(0.28), fs=Pt(9), bold=True, color=C_FILE)
+# NO → send plain
+arrow_d(s3, RC, ry + DH, ry + DH + Inches(0.25), C_CLAUDE)
+txt(s3, "NIE", RC + Inches(0.08), ry + DH + Inches(0.01),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_CLAUDE)
+ry += DH + Inches(0.25)
+
+rrect(s3, RC - NW/2, ry, NW, NH,
+      RGBColor(0x06, 0x28, 0x50),
+      "📤  tg_send(response)\nprosta odpowiedź tekst",
+      fs=Pt(10), fc=C_TELEGRAM, line=C_TELEGRAM)
+ry += NH + Inches(0.5)
+
+# EXEC PHASE
+rect(s3, RC - NW/2 - Inches(0.1), ry - Inches(0.1),
+     NW + Inches(0.2), Inches(2.25), RGBColor(0x1E, 0x05, 0x05),
+     line=C_EXEC, lw=Pt(1.0))
+txt(s3, "EXEC PHASE", RC - NW/2, ry - Inches(0.05), NW, Inches(0.28),
+    fs=Pt(10), bold=True, color=C_EXEC, align=PP_ALIGN.CENTER)
+
+rrect(s3, RC - NW/2, ry + Inches(0.3), NW, NH,
+      RGBColor(0x28, 0x06, 0x06),
+      "🤖  claude -p --allowedTools Bash(*)\ntimeout 300s  model: default",
+      fs=Pt(10), fc=C_EXEC, line=C_EXEC)
+arrow_d(s3, RC, ry + Inches(0.3) + NH, ry + Inches(0.3) + NH + Inches(0.25), C_EXEC)
+
+rrect(s3, RC - NW/2, ry + Inches(0.3) + NH + Inches(0.25), NW, NH,
+      RGBColor(0x10, 0x10, 0x10),
+      "⚙️  Bash: git · gh · curl\nna serwerze rafserver",
+      fs=Pt(10), fc=C_GITHUB, line=C_GITHUB)
+arrow_d(s3, RC, ry + Inches(0.3) + NH * 2 + Inches(0.25),
+        ry + Inches(0.3) + NH * 2 + Inches(0.5), C_TELEGRAM)
+
+rrect(s3, RC - NW/2, ry + Inches(0.3) + NH * 2 + Inches(0.5), NW, NH,
+      RGBColor(0x06, 0x28, 0x50),
+      "📤  tg_send(wynik)\n+ update offset",
+      fs=Pt(10), fc=C_TELEGRAM, line=C_TELEGRAM)
+
+slide_num(s3, 3)
 
 
-# ══════════════════════════════════════════════════════════════════════
-# SLAJD 3 — Logika Bota Telegram (Flowchart)
-# ══════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════
+# SLIDE 4 — DEBATE PIPELINE
+# ════════════════════════════════════════════════════════════════════
 
-s3 = prs.slides.add_slide(blank_layout)
-add_bg(s3)
-accent_bar(s3, ACCENT_AMBER)
+s4 = prs.slides.add_slide(BLANK)
+bg(s4)
+header(s4, "Debate Pipeline — /debate <temat>", "Claude ↔ Gemini · max 6 rund · consensus detection", C_FILE)
 
-add_text(s3, "Logika Bota Jules", Inches(0.5), Inches(0.3), Inches(9), Inches(0.9),
-         font_size=Pt(32), bold=True, color=TEXT_WHITE)
-add_text(s3, "Diagram przepływu: od komendy do akcji",
-         Inches(0.5), Inches(1.1), Inches(9), Inches(0.5),
-         font_size=Pt(14), color=TEXT_GRAY)
+# Top: trigger
+OW = Inches(2.5)
+OH = Inches(0.65)
+CX = Inches(6.67)
 
-bw = Inches(3.7)
-bh = Inches(0.72)
+y = Inches(1.5)
+rrect(s4, CX - OW/2, y, OW, OH,
+      RGBColor(0x0A, 0x20, 0x3A),
+      "📩  /debate <temat>\nlub przycisk w menu",
+      fs=Pt(10), bold=True, fc=C_TELEGRAM, line=C_TELEGRAM)
+y += OH
+arrow_d(s4, CX, y, y + Inches(0.28), C_FILE)
+y += Inches(0.28)
 
-cols = [Inches(0.4), Inches(4.55), Inches(8.7)]
-col_colors = [ACCENT_AMBER, ACCENT_CYAN, ACCENT_RED]
-col_headers = ["⚡  LIVE LISTENER", "🔄  PR REVIEW  (cron 5 min)", "🔧  GITHUB ACTIONS"]
+# Load context
+rrect(s4, CX - OW/2, y, OW, OH,
+      RGBColor(0x20, 0x16, 0x00),
+      "📦  load context\ncode · PRs · TASKS.md · agents.md",
+      fs=Pt(10), fc=C_FILE, line=C_FILE)
+y += OH
+arrow_d(s4, CX, y, y + Inches(0.25), C_FILE)
+y += Inches(0.25)
 
-flows = [
-    [
-        "jules-listener.service\n(systemd long-poll)",
-        "Wiadomość od\nużytkownika",
-        "jules_actions.sh\nprzetwarza tekst",
-        "Wywołanie\nClaude API",
-        "Odpowiedź →\nTelegram",
-    ],
-    [
-        "jules_review.sh\n(cron co 5 min)",
-        "gh pr list\n— pobierz nowe PR-y",
-        "Claude analizuje\ndiff kodu",
-        "gh pr review\n— komentarz GitHub",
-        "Powiadomienie\nTelegram",
-    ],
-    [
-        "Komenda /deploy\nlub /status",
-        "Parsowanie\nkomendy",
-        "gh run / gh issue\n/ gh pr",
-        "Sukces / Błąd\nzapis logu",
-        "Raport\ndo Telegrama",
-    ],
+# Loop box
+loop_y = y
+loop_h = Inches(2.55)
+rect(s4, CX - Inches(5.2), y, Inches(10.4), loop_h,
+     RGBColor(0x0C, 0x1C, 0x0C), line=C_SYSTEM, lw=Pt(1.2))
+txt(s4, "🔁  RUNDA (max 6)", CX - Inches(5.2) + Inches(0.15), y + Inches(0.05),
+    Inches(2.5), Inches(0.3), fs=Pt(9), bold=True, color=C_SYSTEM)
+
+# Inside loop: Claude → Gemini → Haiku check
+inner_y = y + Inches(0.4)
+node_h = Inches(0.65)
+node_w = Inches(2.8)
+
+# Claude node
+claude_cx = CX - Inches(3.0)
+rrect(s4, claude_cx - node_w/2, inner_y, node_w, node_h,
+      RGBColor(0x22, 0x08, 0x3A),
+      "🤖  Claude\nsonnet-4-6\nrola: security dev",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+
+# Gemini node
+gemini_cx = CX + Inches(3.0)
+rrect(s4, gemini_cx - node_w/2, inner_y, node_w, node_h,
+      RGBColor(0x06, 0x22, 0x12),
+      "✨  Gemini\ngemini -p\nrola: code reviewer",
+      fs=Pt(10), fc=C_SYSTEM, line=C_SYSTEM)
+
+# Arrow Claude → Gemini
+arrow_r(s4, claude_cx + node_w/2, gemini_cx - node_w/2, inner_y + node_h/2, C_CLAUDE)
+txt(s4, "powiedział Claude:", CX - Inches(1.0), inner_y + node_h/2 - Inches(0.30),
+    Inches(2.0), Inches(0.28), fs=Pt(8), color=C_CLAUDE, align=PP_ALIGN.CENTER)
+
+# Arrow Gemini response back to loop / consensus
+arrow_d(s4, gemini_cx, inner_y + node_h, inner_y + node_h + Inches(0.3), C_SYSTEM)
+
+# Consensus check
+cons_y = inner_y + node_h + Inches(0.3)
+cons_cx = CX + Inches(3.0)
+DW2 = Inches(2.8)
+DH2 = Inches(0.75)
+diamond(s4, cons_cx - DW2/2, cons_y, DW2, DH2,
+        RGBColor(0x12, 0x1A, 0x06),
+        "Haiku:\nCONSENSUS?", fs=Pt(10), bold=True,
+        fc=C_SYSTEM, line=C_SYSTEM)
+
+# CONSENSUS → break (right)
+arrow_r(s4, cons_cx + DW2/2, cons_cx + DW2/2 + Inches(1.0),
+        cons_y + DH2/2, C_SYSTEM)
+rrect(s4, cons_cx + DW2/2 + Inches(1.0), cons_y + DH2/2 - Inches(0.22),
+      Inches(1.3), Inches(0.44),
+      RGBColor(0x06, 0x22, 0x06), "✅  BREAK\ndone", fs=Pt(9), fc=C_SYSTEM, line=C_SYSTEM)
+txt(s4, "CONSENSUS", cons_cx + DW2/2 + Inches(0.03), cons_y + DH2/2 - Inches(0.35),
+    Inches(0.95), Inches(0.28), fs=Pt(8), bold=True, color=C_SYSTEM)
+
+# CONTINUE → loop back up to Claude
+arrow_l(s4, cons_cx - DW2/2, CX - Inches(5.0), cons_y + DH2/2, C_FILE)
+vline(s4, CX - Inches(5.0), inner_y + node_h/2, cons_y + DH2/2, C_FILE)
+arrow_r(s4, CX - Inches(5.0), claude_cx - node_w/2, inner_y + node_h/2, C_FILE)
+txt(s4, "CONTINUE", CX - Inches(4.8), cons_y + DH2/2 + Inches(0.04),
+    Inches(0.9), Inches(0.25), fs=Pt(8), bold=True, color=C_FILE)
+
+y = loop_y + loop_h
+arrow_d(s4, CX, y, y + Inches(0.25), C_CLAUDE)
+y += Inches(0.25)
+
+# Summary
+rrect(s4, CX - OW/2, y, OW, OH,
+      RGBColor(0x18, 0x08, 0x30),
+      "📝  claude summary\nkluczowe ustalenia + TASK: ekstrakcja",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+y += OH
+arrow_d(s4, CX, y, y + Inches(0.25), C_CLAUDE)
+y += Inches(0.25)
+
+diamond(s4, CX - Inches(1.5), y, Inches(3.0), DH2,
+        RGBColor(0x20, 0x12, 0x00),
+        "TASK: lines\nnaleziono?", fs=Pt(11), bold=True,
+        fc=C_FILE, line=C_FILE)
+# TAK →
+arrow_r(s4, CX + Inches(1.5), CX + Inches(2.0), y + DH2/2, C_FILE)
+rrect(s4, CX + Inches(2.0), y + DH2/2 - Inches(0.45),
+      Inches(2.9), Inches(0.9),
+      RGBColor(0x10, 0x22, 0x10),
+      "🤖  buttons:\n\"Deleguj do Jules\"\njules new --repo",
+      fs=Pt(9), fc=C_SYSTEM, line=C_SYSTEM)
+txt(s4, "TAK", CX + Inches(1.55), y + DH2/2 - Inches(0.36),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_FILE)
+# NIE ↓
+arrow_d(s4, CX, y + DH2, y + DH2 + Inches(0.25), C_TELEGRAM)
+txt(s4, "NIE", CX + Inches(0.08), y + DH2 + Inches(0.01),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_TELEGRAM)
+y += DH2 + Inches(0.25)
+
+rrect(s4, CX - OW/2, y, OW, OH,
+      RGBColor(0x06, 0x22, 0x40),
+      "📤  tg_send(summary)\ndo Telegrama",
+      fs=Pt(10), fc=C_TELEGRAM, line=C_TELEGRAM)
+
+slide_num(s4, 4)
+
+
+# ════════════════════════════════════════════════════════════════════
+# SLIDE 5 — PR REVIEW PIPELINE
+# ════════════════════════════════════════════════════════════════════
+
+s5 = prs.slides.add_slide(BLANK)
+bg(s5)
+header(s5, "PR Review Pipeline — Auto", "cron co 5 minut · 1 PR per run · .reviewed_prs state", C_CLAUDE)
+
+# Vertical centered flow
+FC = Inches(3.5)   # left fork center
+RC5 = Inches(9.5)  # right side for detail
+NW5 = Inches(3.4)
+NH5 = Inches(0.68)
+
+y = Inches(1.5)
+
+# Cron trigger
+oval(s5, FC - Inches(1.5), y, Inches(3.0), Inches(0.52),
+     C_SYSTEM, "⏰  cron  — każde 5 min", fs=Pt(12), bold=True, fc=TEXT_DARK)
+y += Inches(0.52)
+arrow_d(s5, FC, y, y + Inches(0.28), C_SYSTEM)
+y += Inches(0.28)
+
+# gh pr list
+rrect(s5, FC - NW5/2, y, NW5, NH5,
+      RGBColor(0x10, 0x10, 0x10),
+      "🐙  gh pr list --repo mrBTL/VulnApp-Light\n--state open  →  JSON: number · title · author · date",
+      fs=Pt(10), fc=C_GITHUB, line=C_GITHUB)
+y += NH5
+arrow_d(s5, FC, y, y + Inches(0.25), C_GITHUB)
+y += Inches(0.25)
+
+# Any PRs?
+diamond(s5, FC - Inches(1.6), y, Inches(3.2), Inches(0.78),
+        RGBColor(0x28, 0x06, 0x06),
+        "open PRs\nexistują?", fs=Pt(11), bold=True,
+        fc=C_DECISION, line=C_DECISION)
+# NO → exit
+arrow_r(s5, FC + Inches(1.6), FC + Inches(2.2), y + Inches(0.39), C_DECISION)
+oval(s5, FC + Inches(2.2), y + Inches(0.15), Inches(1.5), Inches(0.48),
+     RGBColor(0x20, 0x06, 0x06), "exit(0)", fs=Pt(11), bold=True, fc=C_DECISION)
+txt(s5, "NIE", FC + Inches(1.65), y + Inches(0.05),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_DECISION)
+# YES ↓
+arrow_d(s5, FC, y + Inches(0.78), y + Inches(0.78) + Inches(0.25), C_SYSTEM)
+txt(s5, "TAK", FC + Inches(0.08), y + Inches(0.78) + Inches(0.01),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_SYSTEM)
+y += Inches(0.78) + Inches(0.25)
+
+# For each PR
+rrect(s5, FC - NW5/2, y, NW5, NH5,
+      RGBColor(0x06, 0x20, 0x08),
+      "🔁  foreach PR",
+      fs=Pt(12), bold=True, fc=C_SYSTEM, line=C_SYSTEM)
+y += NH5
+arrow_d(s5, FC, y, y + Inches(0.25), C_SYSTEM)
+y += Inches(0.25)
+
+# Already reviewed?
+diamond(s5, FC - Inches(1.6), y, Inches(3.2), Inches(0.78),
+        RGBColor(0x1E, 0x14, 0x00),
+        "PR# w\n.reviewed_prs?", fs=Pt(11), bold=True,
+        fc=C_FILE, line=C_FILE)
+# YES → skip
+arrow_r(s5, FC + Inches(1.6), FC + Inches(2.2), y + Inches(0.39), C_FILE)
+rrect(s5, FC + Inches(2.2), y + Inches(0.15), Inches(1.5), Inches(0.48),
+      RGBColor(0x20, 0x14, 0x00), "skip\n(już zrecenzowany)",
+      fs=Pt(9), fc=C_FILE, line=C_FILE)
+txt(s5, "TAK", FC + Inches(1.65), y + Inches(0.05),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_FILE)
+# NO ↓
+arrow_d(s5, FC, y + Inches(0.78), y + Inches(0.78) + Inches(0.25), C_SYSTEM)
+txt(s5, "NIE", FC + Inches(0.08), y + Inches(0.78) + Inches(0.01),
+    Inches(0.5), Inches(0.25), fs=Pt(9), bold=True, color=C_SYSTEM)
+y += Inches(0.78) + Inches(0.25)
+
+# Get diff
+rrect(s5, FC - NW5/2, y, NW5, NH5,
+      RGBColor(0x10, 0x10, 0x10),
+      "📄  gh pr diff <number>\nhead -150  (truncated diff)",
+      fs=Pt(10), fc=C_GITHUB, line=C_GITHUB)
+y += NH5
+arrow_d(s5, FC, y, y + Inches(0.25), C_CLAUDE)
+y += Inches(0.25)
+
+# Claude review
+rrect(s5, FC - NW5/2, y, NW5, NH5,
+      RGBColor(0x16, 0x06, 0x2C),
+      "🤖  claude -p (no tools)\nreview: APPROVE / CHANGES NEEDED / CRITICAL\nmax 300 chars · agents.md context",
+      fs=Pt(10), fc=C_CLAUDE, line=C_CLAUDE)
+y += NH5
+arrow_d(s5, FC, y, y + Inches(0.25), C_TELEGRAM)
+y += Inches(0.25)
+
+# Send to Telegram
+rrect(s5, FC - NW5/2, y, NW5, NH5,
+      RGBColor(0x06, 0x24, 0x44),
+      "📤  tg_send: PR# · title · review\n/merge N  /close N  /comment N <tekst>",
+      fs=Pt(10), fc=C_TELEGRAM, line=C_TELEGRAM)
+y += NH5
+arrow_d(s5, FC, y, y + Inches(0.25), C_FILE)
+y += Inches(0.25)
+
+# Save state
+rrect(s5, FC - NW5/2, y, NW5, NH5 * 0.8,
+      RGBColor(0x22, 0x14, 0x00),
+      "💾  echo PR# >> .reviewed_prs  →  exit(0)",
+      fs=Pt(10), fc=C_FILE, line=C_FILE)
+
+# ── RIGHT SIDE: Telegram message anatomy ────────────────────────
+txt(s5, "Wiadomość w Telegram:", RC5, Inches(1.5), Inches(3.5), Inches(0.35),
+    fs=Pt(11), bold=True, color=C_TELEGRAM)
+
+msg_lines = [
+    ("🤖 Jules PR #42",                     C_TELEGRAM),
+    ("📝  Fix: SQL injection in search",    TEXT_W),
+    ("",                                     TEXT_W),
+    ("🔍 Claude review:",                   C_CLAUDE),
+    ("CHANGES NEEDED — query not",          TEXT_W),
+    ("parameterized, line 87",              TEXT_W),
+    ("",                                     TEXT_W),
+    ("✅  /merge 42",                        C_SYSTEM),
+    ("❌  /close 42",                       C_DECISION),
+    ("✏️  /comment 42 <tekst>",            C_FILE),
 ]
+msg_y = Inches(1.9)
+msg_bg = rect(s5, RC5 - Inches(0.1), msg_y - Inches(0.1),
+              Inches(3.6), Inches(3.2), CARD, line=C_TELEGRAM)
+for line, col in msg_lines:
+    txt(s5, line, RC5 + Inches(0.05), msg_y, Inches(3.4), Inches(0.3),
+        fs=Pt(10), color=col)
+    msg_y += Inches(0.28)
 
-y_header = Inches(1.55)
-y_start  = Inches(1.95)
-y_step   = Inches(0.95)
+# State file diagram
+txt(s5, ".reviewed_prs (state):", RC5, Inches(5.3), Inches(3.5), Inches(0.35),
+    fs=Pt(11), bold=True, color=C_FILE)
+state_bg = rect(s5, RC5 - Inches(0.1), Inches(5.65), Inches(3.6), Inches(1.2),
+               CARD, line=C_FILE)
+for i, line in enumerate(["37", "38", "39", "40", "41", "42  ← nowy"]):
+    col = C_FILE if i == 5 else TEXT_DIM
+    bold_ = i == 5
+    txt(s5, line, RC5 + Inches(0.1), Inches(5.75) + i * Inches(0.17),
+        Inches(2.0), Inches(0.2), fs=Pt(10), color=col, bold=bold_)
 
-for ci, (col_x, col_col, col_hdr) in enumerate(zip(cols, col_colors, col_headers)):
-    add_text(s3, col_hdr, col_x, y_header, bw, Inches(0.35),
-             font_size=Pt(12), bold=True, color=col_col, align=PP_ALIGN.CENTER)
-
-    for fi, node_text in enumerate(flows[ci]):
-        by = y_start + fi * y_step
-        is_last  = fi == len(flows[ci]) - 1
-        is_first = fi == 0
-        node_col = ACCENT_GREEN if is_last else col_col
-        add_rounded_box(s3, col_x, by, bw, bh,
-                        BG_CARD, node_text,
-                        txt_size=Pt(12), bold=(is_first or is_last),
-                        txt_color=node_col, line_color=node_col)
-        if not is_last:
-            add_arrow_v(s3,
-                        col_x + bw/2,
-                        by + bh,
-                        by + bh + (y_step - bh),
-                        col_col)
-
-add_text(s3, "03 / 05", Inches(11.8), Inches(6.9), Inches(1.3), Inches(0.4),
-         font_size=Pt(11), color=ACCENT_CYAN, align=PP_ALIGN.RIGHT)
+slide_num(s5, 5)
 
 
-# ══════════════════════════════════════════════════════════════════════
-# SLAJD 4 — User Journey Map
-# ══════════════════════════════════════════════════════════════════════
-
-s4 = prs.slides.add_slide(blank_layout)
-add_bg(s4)
-accent_bar(s4, ACCENT_GREEN)
-
-add_text(s4, "Mapa Interakcji Użytkownika", Inches(0.5), Inches(0.3), Inches(10), Inches(0.9),
-         font_size=Pt(32), bold=True, color=TEXT_WHITE)
-add_text(s4, "User Journey: od importu CSV do zamknięcia ticketu",
-         Inches(0.5), Inches(1.1), Inches(10), Inches(0.5),
-         font_size=Pt(14), color=TEXT_GRAY)
-
-# Oś czasu
-add_rect(s4, Inches(0.5), Inches(3.72), Inches(12.33), Inches(0.08), ACCENT_GREEN)
-
-steps = [
-    ("1", "Import\nCSV",             "Defender\nexportuje raport",         ACCENT_AMBER, Inches(0.5)),
-    ("2", "Web\nDashboard",          "Przegląd CVE,\nfiltrowanie",          ACCENT_CYAN,  Inches(2.65)),
-    ("3", "Aktualizacja\nStatusu",   "action_taken\nticket_number",         ACCENT_GREEN, Inches(4.8)),
-    ("4", "Mobile\nPodgląd",         "iOS: /api/cves\nprzez ZeroTier",      ACCENT_CYAN,  Inches(6.95)),
-    ("5", "Bot Jules",               "Telegram: pytania,\nPR review",       ACCENT_AMBER, Inches(9.1)),
-    ("6", "Raport\nZamknięcia",      "Export / statystyki\ndo zarządu",     TEXT_GRAY,    Inches(11.25)),
-]
-
-card_w = Inches(1.85)
-card_h = Inches(0.75)
-
-for num, title, desc, col, bx in steps:
-    n = int(num)
-    # Kółko na osi
-    circle = s4.shapes.add_shape(9, bx + Inches(0.22), Inches(3.49), Inches(0.45), Inches(0.45))
-    circle.fill.solid()
-    circle.fill.fore_color.rgb = col
-    circle.line.fill.background()
-    add_text(s4, num, bx + Inches(0.22), Inches(3.49), Inches(0.45), Inches(0.45),
-             font_size=Pt(13), bold=True, color=TEXT_DARK, align=PP_ALIGN.CENTER)
-
-    if n % 2 == 1:
-        # Karta nad osią
-        by_card = Inches(2.3)
-        add_rounded_box(s4, bx, by_card, card_w, card_h,
-                        BG_CARD, title, txt_size=Pt(13), bold=True,
-                        txt_color=col, line_color=col)
-        add_text(s4, desc, bx, by_card + card_h, card_w, Inches(0.65),
-                 font_size=Pt(11), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-        add_arrow_v(s4, bx + card_w/2, by_card + card_h + Inches(0.65), Inches(3.71), col)
-    else:
-        # Karta pod osią
-        by_card = Inches(4.45)
-        add_rounded_box(s4, bx, by_card, card_w, card_h,
-                        BG_CARD, title, txt_size=Pt(13), bold=True,
-                        txt_color=col, line_color=col)
-        add_text(s4, desc, bx, by_card + card_h, card_w, Inches(0.65),
-                 font_size=Pt(11), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-        add_arrow_v(s4, bx + card_w/2, Inches(3.8), by_card, col)
-
-# Persona labels
-add_text(s4, "👔 Admin / Security Team ──────────────────────────────────────────────────────",
-         Inches(0.5), Inches(5.55), Inches(12.3), Inches(0.4),
-         font_size=Pt(10), color=ACCENT_AMBER)
-add_text(s4, "💻 Developer / DevOps ──────────────────────────────────────────────────────────",
-         Inches(0.5), Inches(5.95), Inches(12.3), Inches(0.4),
-         font_size=Pt(10), color=ACCENT_CYAN)
-
-add_text(s4, "04 / 05", Inches(11.8), Inches(6.9), Inches(1.3), Inches(0.4),
-         font_size=Pt(11), color=ACCENT_CYAN, align=PP_ALIGN.RIGHT)
-
-
-# ══════════════════════════════════════════════════════════════════════
-# SLAJD 5 — Dashboard Wydajności
-# ══════════════════════════════════════════════════════════════════════
-
-s5 = prs.slides.add_slide(blank_layout)
-add_bg(s5)
-accent_bar(s5, ACCENT_RED)
-
-add_text(s5, "Statystyki i Wydajność", Inches(0.5), Inches(0.3), Inches(10), Inches(0.9),
-         font_size=Pt(32), bold=True, color=TEXT_WHITE)
-add_text(s5, "Dashboard — propozycja metryk operacyjnych",
-         Inches(0.5), Inches(1.1), Inches(9), Inches(0.5),
-         font_size=Pt(14), color=TEXT_GRAY)
-
-# KPI cards
-kpis = [
-    ("247",  "CVE\nŚledzonych",        ACCENT_CYAN),
-    ("89%",  "Zamkniętych\nw terminie", ACCENT_GREEN),
-    ("3.2h", "Avg. czas\nreakcji",      ACCENT_AMBER),
-    ("12",   "PR Review\n/ tydzień",    ACCENT_RED),
-    ("↑5%",  "Poprawa\nMoM",            TEXT_GRAY),
-]
-for i, (val, label, col) in enumerate(kpis):
-    bx = Inches(0.4) + i * Inches(2.55)
-    add_rounded_box(s5, bx, Inches(1.65), Inches(2.3), Inches(1.4),
-                    BG_CARD, "", line_color=col)
-    add_text(s5, val,   bx, Inches(1.75), Inches(2.3), Inches(0.7),
-             font_size=Pt(34), bold=True, color=col, align=PP_ALIGN.CENTER)
-    add_text(s5, label, bx, Inches(2.55), Inches(2.3), Inches(0.5),
-             font_size=Pt(12), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-
-# Bar chart: CVE severity
-add_rounded_box(s5, Inches(0.4), Inches(3.25), Inches(5.8), Inches(2.9),
-                BG_CARD, "", line_color=ACCENT_CYAN)
-add_text(s5, "CVE wg. Severity",
-         Inches(0.6), Inches(3.35), Inches(5.4), Inches(0.4),
-         font_size=Pt(13), bold=True, color=ACCENT_CYAN)
-
-bars = [
-    ("Critical", 0.85, ACCENT_RED),
-    ("High",     0.60, ACCENT_AMBER),
-    ("Medium",   0.40, ACCENT_CYAN),
-    ("Low",      0.20, ACCENT_GREEN),
-]
-max_h = Inches(1.5)
-for i, (lbl, pct, col) in enumerate(bars):
-    bx  = Inches(0.75) + i * Inches(1.3)
-    bh2 = Emu(int(max_h * pct))
-    by  = Inches(3.85) + (max_h - bh2)
-    add_rect(s5, bx, by, Inches(0.9), bh2, col)
-    add_text(s5, lbl, bx - Inches(0.1), Inches(5.45), Inches(1.1), Inches(0.35),
-             font_size=Pt(10), color=TEXT_GRAY, align=PP_ALIGN.CENTER)
-    add_text(s5, f"{int(pct*100)}%", bx, by - Inches(0.3), Inches(0.9), Inches(0.3),
-             font_size=Pt(11), bold=True, color=col, align=PP_ALIGN.CENTER)
-
-# Status tickets (lista zamiast donut)
-add_rounded_box(s5, Inches(6.5), Inches(3.25), Inches(6.3), Inches(2.9),
-                BG_CARD, "", line_color=ACCENT_GREEN)
-add_text(s5, "Status Ticketów",
-         Inches(6.7), Inches(3.35), Inches(5.8), Inches(0.4),
-         font_size=Pt(13), bold=True, color=ACCENT_GREEN)
-
-status_items = [
-    ("✅  Zamknięte",   "62%", ACCENT_GREEN,  Inches(3.85)),
-    ("🔄  W trakcie",  "24%", ACCENT_CYAN,   Inches(4.5)),
-    ("⚠️  Zaległe",   "10%", ACCENT_AMBER,  Inches(5.15)),
-    ("🔴  Krytyczne",   " 4%", ACCENT_RED,   Inches(5.8)),
-]
-for label, pct, col, by in status_items:
-    bar_w = Inches(4.5 * float(pct.strip().rstrip('%')) / 100)
-    add_rect(s5, Inches(6.7), by, bar_w, Inches(0.38), col)
-    add_text(s5, f"{label}  {pct}", Inches(6.7), by, Inches(5.5), Inches(0.38),
-             font_size=Pt(12), bold=False, color=TEXT_WHITE)
-
-# Bot activity strip
-add_rounded_box(s5, Inches(0.4), Inches(6.25), Inches(12.4), Inches(0.5),
-                BG_CARD,
-                "🤖  Jules:  47 komend/tydzień  |  12 PR review  |  ∅ 8s latency  |  uptime 99.8%",
-                txt_size=Pt(12), bold=False, txt_color=ACCENT_AMBER, line_color=ACCENT_AMBER)
-
-add_text(s5, "* Dane poglądowe — docelowo integracja z logami systemd i GitHub API",
-         Inches(0.5), Inches(6.88), Inches(11), Inches(0.4),
-         font_size=Pt(10), italic=True, color=TEXT_GRAY)
-add_text(s5, "05 / 05", Inches(11.8), Inches(6.88), Inches(1.3), Inches(0.4),
-         font_size=Pt(11), color=ACCENT_CYAN, align=PP_ALIGN.RIGHT)
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ZAPIS
-# ══════════════════════════════════════════════════════════════════════
-
-out = "VulnApp_Lite_Jules_Bot_Presentation.pptx"
+# ════════════════════════════════════════════════════════════════════
+# SAVE
+# ════════════════════════════════════════════════════════════════════
+out = "Jules_Bot_Architecture.pptx"
 prs.save(out)
 print(f"Saved: {out}")
